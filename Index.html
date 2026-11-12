@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ULD Suite · Tablero de Balance</title>
+  <!-- Preconnect: abre la conexión TLS con los CDNs antes de pedir recursos -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
+  <link rel="dns-prefetch" href="https://s.latamairlines.com">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.0/index.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.0/index.css">
+  <!-- Tailwind runtime diferido: evita bloquear el parseo inicial del shell. -->
+  <script defer src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js es necesario para los primeros render: se carga ya, pero diferido -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+  <!-- React + htm para el tablero directivo. htm evita Babel en el navegador. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+  <!-- El mapa Leaflet se carga bajo demanda.
+       No se descarga nada de esto en el Dashboard para acelerar la primera carga. -->
+
+  <?!= include('Styles'); ?>
+</head>
+<body>
+
+  <div id="initial-loader" class="initial-loader" role="status" aria-live="polite" aria-busy="true">
+    <div class="loader-card">
+      <div class="loader-ring" aria-hidden="true"></div>
+      <div class="loader-title">Cargando ULD Suite</div>
+      <div class="loader-sub" id="loader-status">Consultando balance, inventario y movimientos… Esto puede tardar si el servidor está procesando cálculos.</div>
+    </div>
+  </div>
+
+  <div class="scroll-indicator" id="scrollIndicator"></div>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)" aria-hidden="true"></div>
+
+  <div class="app-shell">
+    <!-- ══════════ SIDEBAR FIJO ══════════ -->
+    <aside class="app-sidebar" id="appSidebar" aria-label="Navegación principal">
+      <button type="button" class="sidebar-collapse" id="sidebarCollapse" onclick="toggleSidebarCollapsed()" aria-controls="appSidebar" aria-expanded="true" aria-label="Contraer menú lateral" title="Contraer menú lateral">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="sidebar-brand">
+        <div class="logo-mark sidebar-logo" aria-hidden="true">U</div>
+        <div class="sidebar-brand-copy">
+          <div class="sidebar-brand-title">ULD Suite <span>v9.4 PRO</span></div>
+          <div class="sidebar-brand-sub">LATAM Cargo · HDC OPS</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Módulos">
+        <div class="sidebar-nav-label">Operación</div>
+        <button type="button" class="nav-item app-nav-item active" id="nav-dashboard" onclick="sidebarNav('dashboard',this)">
+          <svg class="nav-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span>Dashboard</span>
+          <span class="nav-live-dot" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="nav-item app-nav-item" id="nav-inventory" onclick="sidebarNav('inventory',this)">
+          <svg class="nav-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+          <span>Inventario</span>
+        </button>
+        <button type="button" class="nav-item app-nav-item" id="nav-plan" onclick="sidebarNav('plan',this)">
+          <svg class="nav-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+          <span>Plan</span>
+        </button>
+        <!-- Solo se mantienen las tres vistas operativas principales. -->
+        <!--
+        <div class="sidebar-nav-label" style="display:none">Análisis</div>
+        <button type="button" class="nav-item app-nav-item" id="nav-reports" style="display:none" onclick="sidebarNav('reports',this)">
+          <svg class="nav-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+          <span>Reportes</span>
+        </button>-->
+
+        <!--
+        <div class="sidebar-nav-label">Sistema</div>
+        <button type="button" class="nav-item app-nav-item" id="nav-config" onclick="sidebarNav('config',this)">
+          <svg class="nav-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.61.66 1.05 1.28 1.05H21a2 2 0 1 1 0 4h-.09c-.62 0-1.14.44-1.28 1.05z"/></svg>
+          <span>Configuración</span>
+        </button>-->
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-theme" role="group" aria-label="Tema de interfaz">
+          <span class="sidebar-theme-label">Tema</span>
+          <div class="theme-seg">
+            <button type="button" class="theme-choice" data-theme-choice="light" onclick="setThemeChoice('light')" aria-label="Tema claro">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+              Claro
+            </button>
+            <button type="button" class="theme-choice" data-theme-choice="dark" onclick="setThemeChoice('dark')" aria-label="Tema oscuro">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              Oscuro
+            </button>
+          </div>
+        </div>
+        <div class="sidebar-profile">
+          <div class="profile-avatar" aria-hidden="true">OA</div>
+          <div class="profile-copy">
+            <b>Operaciones</b>
+            <span>Centro de control · LATAM Cargo</span>
+          </div>
+          <span class="profile-status" title="Sesión activa" aria-label="Sesión activa"></span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ══════════ COLUMNA PRINCIPAL ══════════ -->
+    <div class="app-main">
+      <header class="app-topbar">
+        <button type="button" class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" aria-label="Abrir menú" aria-controls="appSidebar" aria-expanded="false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+
+        <div class="exec-heading">
+          <div class="exec-title-row">
+            <h1 class="exec-title">Tablero de Balance</h1>
+            <span class="exec-badge">Visión Directiva</span>
+          </div>
+        </div>
+
+        <div class="exec-top-actions">
+          <div class="exec-date-pill" title="Rango de fechas del tablero">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            <span class="exec-date-label">Rango</span>
+            <b id="execDateRange" class="mono">—</b>
+          </div>
+          <div class="exec-live" title="Última sincronización con Google Sheets">
+            <span class="pulse-dot"></span>
+            <span class="exec-live-copy"><span>Último sync</span><b id="lastSync" class="mono">—</b></span>
+            <span class="exec-live-time mono" id="liveTime">--:--:--</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="dashboard-workspace">
+        <?!= include('View_Directiva'); ?>
+        <?!= include('View_Matriz'); ?>
+        <?!= include('View_Inventario'); ?>
+        <?!= include('View_MapaRed'); ?>
+
+        <footer class="app-footer">
+          <div class="app-footer-brand">
+            <div class="footer-mark" aria-hidden="true"></div>
+            <span><b>ULD Suite v9.4 PRO</b> · LATAM Cargo · HDC Europe &amp; Americas</span>
+          </div>
+          <div class="app-footer-meta">
+            <span>Datos actualizados en tiempo real</span>
+            <span>© 2026 · Centros de control de alta precisión</span>
+          </div>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <!-- ══════════ CONFIGURACIÓN ══════════ -->
+  <div class="app-modal" id="configPanel" role="dialog" aria-modal="true" aria-labelledby="configTitle" aria-hidden="true">
+    <div class="app-modal-backdrop" onclick="closeConfigPanel()"></div>
+    <div class="app-modal-card">
+      <div class="app-modal-head">
+        <div>
+          <div class="section-kicker">Preferencias</div>
+          <h2 id="configTitle">Configuración</h2>
+        </div>
+        <button type="button" class="app-modal-close" onclick="closeConfigPanel()" aria-label="Cerrar configuración">&times;</button>
+      </div>
+      <div class="config-block">
+        <div class="config-block-title">Apariencia</div>
+        <div class="theme-seg is-wide">
+          <button type="button" class="theme-choice" data-theme-choice="light" onclick="setThemeChoice('light')">Claro</button>
+          <button type="button" class="theme-choice" data-theme-choice="dark" onclick="setThemeChoice('dark')">Oscuro</button>
+        </div>
+      </div>
+      <div class="config-block">
+        <div class="config-block-title">Fuente de datos</div>
+        <p class="config-copy">Tablero conectado a Google Sheets a través de <span class="mono">google.script.run</span>. Las cifras se recalculan al pulsar <b>Actualizar</b>.</p>
+      </div>
+      <div class="config-block">
+        <div class="config-block-title">Sesión</div>
+        <div class="config-profile">
+          <div class="profile-avatar" aria-hidden="true">OA</div>
+          <div class="profile-copy"><b>Operaciones AEROSAN</b><span>Centro de control · LATAM Cargo</span></div>
+        </div>
+      </div>
+      <div class="app-modal-actions">
+        <button type="button" class="btn" onclick="closeConfigPanel()">Cerrar</button>
+        <button type="button" class="btn btn-primary" onclick="refreshData()">Actualizar datos</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Tema: cada control de la UI apunta al mismo estado persistido ──
+    function setThemeChoice(theme) {
+      var next = theme === 'light' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('uld-theme', next); } catch (e) {}
+      syncThemeUI();
+      if (window.refreshMapTheme) { try { window.refreshMapTheme(); } catch (e) {} }
+      if (window.refreshExecCharts) { try { window.refreshExecCharts(); } catch (e) {} }
+    }
+    function syncThemeUI() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      document.querySelectorAll('[data-theme-choice]').forEach(function (btn) {
+        var active = btn.getAttribute('data-theme-choice') === current;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+    }
+    (function initTheme() {
+      var saved = 'dark';
+      try { saved = localStorage.getItem('uld-theme') || 'dark'; } catch (e) {}
+      document.documentElement.setAttribute('data-theme', saved);
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncThemeUI);
+      else syncThemeUI();
+    })();
+
+    // ── Sidebar móvil ──
+    function toggleSidebar(force) {
+      var open = typeof force === 'boolean' ? force : !document.body.classList.contains('nav-open');
+      document.body.classList.toggle('nav-open', open);
+      var btn = document.getElementById('sidebarToggle');
+      if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    // ── Sidebar escritorio: contraer / expandir ──
+    function syncSidebarCollapseUI() {
+      var collapsed = document.body.classList.contains('sidebar-collapsed');
+      var btn = document.getElementById('sidebarCollapse');
+      if (!btn) return;
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      btn.setAttribute('aria-label', collapsed ? 'Expandir menú lateral' : 'Contraer menú lateral');
+      btn.setAttribute('title', collapsed ? 'Expandir menú lateral' : 'Contraer menú lateral');
+    }
+    function toggleSidebarCollapsed(force) {
+      var collapsed = typeof force === 'boolean' ? force : !document.body.classList.contains('sidebar-collapsed');
+      document.body.classList.toggle('sidebar-collapsed', collapsed);
+      try { localStorage.setItem('uld-sidebar-collapsed', collapsed ? '1' : '0'); } catch (e) {}
+      syncSidebarCollapseUI();
+      setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 240);
+    }
+    (function initSidebarCollapsed() {
+      var collapsed = false;
+      try { collapsed = localStorage.getItem('uld-sidebar-collapsed') === '1'; } catch (e) {}
+      if (collapsed) document.body.classList.add('sidebar-collapsed');
+      syncSidebarCollapseUI();
+      document.querySelectorAll('.app-nav-item').forEach(function (item) {
+        var label = item.querySelector('span:not(.nav-live-dot)');
+        if (label) item.setAttribute('title', label.textContent.trim());
+      });
+    })();
+    if (window.matchMedia) {
+      var desktopMq = window.matchMedia('(min-width: 1025px)');
+      var closeOnDesktop = function (e) { if (e.matches) toggleSidebar(false); };
+      if (desktopMq.addEventListener) desktopMq.addEventListener('change', closeOnDesktop);
+      else if (desktopMq.addListener) desktopMq.addListener(closeOnDesktop);
+    }
+
+    // ── Configuración ──
+    function openConfigPanel() {
+      var p = document.getElementById('configPanel');
+      if (!p) return;
+      p.classList.add('is-open');
+      p.setAttribute('aria-hidden', 'false');
+      syncThemeUI();
+    }
+    function closeConfigPanel() {
+      var p = document.getElementById('configPanel');
+      if (!p) return;
+      p.classList.remove('is-open');
+      p.setAttribute('aria-hidden', 'true');
+    }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { closeConfigPanel(); toggleSidebar(false); }
+    });
+  </script>
+  <?!= include('Scripts_UI'); ?>
+  <?!= include('Scripts_Exec'); ?>
+  <?!= include('Scripts_DataBridge'); ?>
+</body>
+</html>
